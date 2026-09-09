@@ -25,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -69,6 +69,17 @@ jobs:
       - name: Show metrics
         run: cat outputs/metrics/metrics.json
 
+      # The model trained above is uploaded once here, and downloaded
+      # by push-image below. Every job gets a fresh machine with nothing
+      # on it, so this is the only way to hand a file from one job to
+      # another without retraining it.
+      - name: Upload the trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: outputs/model/model.pkl
+          retention-days: 7
+
       - name: Build Docker image
         run: docker build -t $IMAGE_NAME:ci .
 
@@ -83,29 +94,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Same model test-and-build already trained and evaluated.
+      # No retraining, no second download of the dataset.
+      - name: Download the trained model
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: outputs/model
+
+      - name: Confirm the model arrived
+        run: ls -la outputs/model/model.pkl
+
       - name: Azure login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Rebuild the model
-        env:
-          BASE: https://raw.githubusercontent.com/IBM
-          REPO: telco-customer-churn-on-icp4d/master/data
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          mkdir -p data/raw
-          curl -sSL \
-            -o data/raw/Telco-Customer-Churn.csv \
-            "$BASE/$REPO/Telco-Customer-Churn.csv"
-          python src/prep.py \
-            --input_data data/raw/Telco-Customer-Churn.csv \
-            --output_data outputs/clean
-          python src/train.py \
-            --training_data outputs/clean \
-            --model_output outputs/model \
-            --test_data_output outputs/test
 
       - name: Log in to the registry
         run: az acr login --name ${{ vars.ACR_NAME }}
@@ -120,7 +123,7 @@ jobs:
           docker push $REGISTRY/$IMAGE_NAME:latest
 
   deploy:
-    name: Deploy to Azure Container Apps
+    name: Deploy
     needs: push-image
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

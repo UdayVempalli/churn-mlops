@@ -96,7 +96,7 @@ jobs:
 
       # Same model test-and-build already trained and evaluated.
       # No retraining, no second download of the dataset.
-      - name: Download the trained model
+      - name: Download the trained model via artifact
         uses: actions/download-artifact@v4
         with:
           name: trained-model

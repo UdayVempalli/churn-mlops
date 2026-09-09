@@ -1,4 +1,4 @@
-"""FastAPI application serving the churn model."""
+"""FastAPI serving the churn model."""
 
 import os
 from contextlib import asynccontextmanager
